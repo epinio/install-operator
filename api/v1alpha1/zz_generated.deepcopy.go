@@ -103,7 +103,6 @@ func (in *InstallEpinioSpec) DeepCopy() *InstallEpinioSpec {
 func (in *InstallEpinioStatus) DeepCopyInto(out *InstallEpinioStatus) {
 	*out = *in
 	in.LastUpdateTime.DeepCopyInto(&out.LastUpdateTime)
-	in.LastTransitionTime.DeepCopyInto(&out.LastTransitionTime)
 	if in.Conditions != nil {
 		in, out := &in.Conditions, &out.Conditions
 		*out = make([]v1.Condition, len(*in))

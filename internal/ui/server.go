@@ -163,7 +163,7 @@ func (s *Server) findActiveInstall(ctx context.Context, targetNamespace string) 
 		}
 		available := findCondition(item.Status.Conditions, "Available")
 		progressing := findCondition(item.Status.Conditions, "Progressing")
-		if conditionTrue(available) || conditionTrue(progressing) || item.Status.RunningStatus == "Installing" {
+		if conditionTrue(available) || conditionTrue(progressing) {
 			return item, nil
 		}
 	}

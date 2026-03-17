@@ -30,12 +30,17 @@ type InstallEpinioSpec struct {
 	// The following markers will use OpenAPI v3 schema to validate the value
 	// More info: https://book.kubebuilder.io/reference/markers/crd-validation.html
 
-	// foo is an example field of InstallEpinio. Edit installepinio_types.go to remove/update
 	// +optional
+	// +kubebuilder:validation:Pattern=`^v?[0-9]+\.[0-9]+\.[0-9]+([-.][0-9A-Za-z.-]+)?$`
+	// +kubebuilder:validation:MaxLength=64
 	Version string `json:"version,omitempty"`
 	// +optional
+	// +kubebuilder:validation:Pattern=`^([a-z0-9]([-a-z0-9]*[a-z0-9])?)(\.([a-z0-9]([-a-z0-9]*[a-z0-9])?))*$`
+	// +kubebuilder:validation:MaxLength=253
 	Domain string `json:"domain,omitempty"`
 	// +optional
+	// +kubebuilder:validation:Pattern=`^[a-z0-9]([-a-z0-9]*[a-z0-9])?$`
+	// +kubebuilder:validation:MaxLength=63
 	TargetNamespace string `json:"targetNamespace,omitempty"`
 	// +optional
 	ImagePullSecret string `json:"imagePullSecret,omitempty"`
@@ -55,21 +60,8 @@ type InstallEpinioStatus struct {
 	// For Kubernetes API conventions, see:
 	// https://github.com/kubernetes/community/blob/master/contributors/devel/sig-architecture/api-conventions.md#typical-status-properties
 
-	// conditions represent the current state of the InstallEpinio resource.
-	// Each condition has a unique type and reflects the status of a specific aspect of the resource.
-	//
-	// Standard condition types include:
-	// - "Available": the resource is fully functional
-	// - "Progressing": the resource is being created or updated
-	// - "Degraded": the resource failed to reach or maintain its desired state
-	//
-	// The status of each condition is one of True, False, or Unknown.
-	// +optional
-	RunningStatus string `json:"runningStatus,omitempty"`
 	// +optional
 	LastUpdateTime metav1.Time `json:"lastUpdateTime,omitempty"`
-	// +optional
-	LastTransitionTime metav1.Time `json:"lastTransitionTime,omitempty"`
 
 	// conditions represent the current state of the InstallEpinio resource.
 	// +listType=map
