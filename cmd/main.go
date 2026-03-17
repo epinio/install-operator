@@ -71,9 +71,12 @@ func main() {
 	flag.StringVar(&metricsAddr, "metrics-bind-address", "0", "The address the metrics endpoint binds to. "+
 		"Use :8443 for HTTPS or :8080 for HTTP, or leave as 0 to disable the metrics service.")
 	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
-	flag.StringVar(&uiAddr, "ui-bind-address", ":8082", "The address the install UI binds to. Use 0 to disable the UI server.")
-	flag.StringVar(&installerServiceAccount, "installer-service-account", "", "Service account used by the installer Job. Defaults to the manager Pod service account.")
-	flag.StringVar(&installerHelmImage, "installer-helm-image", "alpine/helm:3.18", "Container image used for the installer Job.")
+	flag.StringVar(&uiAddr, "ui-bind-address", ":8082",
+		"The address the install UI binds to. Use 0 to disable the UI server.")
+	flag.StringVar(&installerServiceAccount, "installer-service-account", "",
+		"Service account used by the installer Job. Defaults to the manager Pod service account.")
+	flag.StringVar(&installerHelmImage, "installer-helm-image", "alpine/helm:3.18",
+		"Container image used for the installer Job.")
 	flag.BoolVar(&enableLeaderElection, "leader-elect", false,
 		"Enable leader election for controller manager. "+
 			"Enabling this will ensure there is only one active controller manager.")

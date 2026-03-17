@@ -6,7 +6,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/go-logr/logr"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -125,7 +124,7 @@ func TestReconcileDeleteCleansCrossNamespaceResources(t *testing.T) {
 		t.Fatalf("get install: %v", err)
 	}
 
-	if _, err := reconciler.reconcileDelete(ctx, logr.Discard(), &install, "system"); err != nil {
+	if _, err := reconciler.reconcileDelete(ctx, &install, "system"); err != nil {
 		t.Fatalf("reconcile delete: %v", err)
 	}
 

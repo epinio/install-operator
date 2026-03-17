@@ -23,7 +23,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/go-logr/logr"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -112,9 +111,10 @@ func (r *InstallEpinioReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		"controllerNamespace", ctrlNs,
 		"targetNamespace", strings.TrimSpace(inst.Spec.TargetNamespace),
 	)
+	ctx = logf.IntoContext(ctx, log)
 
 	if !inst.DeletionTimestamp.IsZero() {
-		return r.reconcileDelete(ctx, log, &inst, ctrlNs)
+		return r.reconcileDelete(ctx, &inst, ctrlNs)
 	}
 
 	if controllerutil.AddFinalizer(&inst, installCleanupFinalizer) {
@@ -221,7 +221,7 @@ func (r *InstallEpinioReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 				Reason:  "JobCreationFailed",
 				Message: err.Error(),
 			})
-			if statusErr := r.updateStatus(ctx, log, &inst); statusErr != nil {
+			if statusErr := r.updateStatus(ctx, &inst); statusErr != nil {
 				return ctrl.Result{}, errors.Join(err, statusErr)
 			}
 			return ctrl.Result{}, err
@@ -242,7 +242,7 @@ func (r *InstallEpinioReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 			Reason:  "Installing",
 			Message: "Install Job created",
 		})
-		if err := r.updateStatus(ctx, log, &inst); err != nil {
+		if err := r.updateStatus(ctx, &inst); err != nil {
 			return ctrl.Result{}, err
 		}
 		return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
@@ -275,12 +275,12 @@ func (r *InstallEpinioReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 			Reason:  "Installing",
 			Message: "Install Job is still running",
 		})
-		if err := r.updateStatus(ctx, log, &inst); err != nil {
+		if err := r.updateStatus(ctx, &inst); err != nil {
 			return ctrl.Result{}, err
 		}
 		return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
 	}
-	if err := r.updateStatus(ctx, log, &inst); err != nil {
+	if err := r.updateStatus(ctx, &inst); err != nil {
 		return ctrl.Result{}, err
 	}
 	return ctrl.Result{}, nil
@@ -329,7 +329,8 @@ func (r *InstallEpinioReconciler) buildInstallJob(name, namespace, configMapName
 	}
 }
 
-func (r *InstallEpinioReconciler) reconcileDelete(ctx context.Context, log logr.Logger, inst *epiniov1alpha1.InstallEpinio, ctrlNs string) (ctrl.Result, error) {
+func (r *InstallEpinioReconciler) reconcileDelete(ctx context.Context, inst *epiniov1alpha1.InstallEpinio, ctrlNs string) (ctrl.Result, error) {
+	log := logf.FromContext(ctx)
 	if !controllerutil.ContainsFinalizer(inst, installCleanupFinalizer) {
 		return ctrl.Result{}, nil
 	}
@@ -337,10 +338,10 @@ func (r *InstallEpinioReconciler) reconcileDelete(ctx context.Context, log logr.
 	cmName := configMapName(inst.Namespace, inst.Name)
 	jobName := installJobName(inst.Namespace, inst.Name)
 
-	if err := r.deleteIfExists(ctx, &batchv1.Job{ObjectMeta: metav1.ObjectMeta{Name: jobName, Namespace: ctrlNs}}, "Job", log); err != nil {
+	if err := r.deleteIfExists(ctx, &batchv1.Job{ObjectMeta: metav1.ObjectMeta{Name: jobName, Namespace: ctrlNs}}, "Job"); err != nil {
 		return ctrl.Result{}, err
 	}
-	if err := r.deleteIfExists(ctx, &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: cmName, Namespace: ctrlNs}}, "ConfigMap", log); err != nil {
+	if err := r.deleteIfExists(ctx, &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: cmName, Namespace: ctrlNs}}, "ConfigMap"); err != nil {
 		return ctrl.Result{}, err
 	}
 
@@ -354,7 +355,8 @@ func (r *InstallEpinioReconciler) reconcileDelete(ctx context.Context, log logr.
 	return ctrl.Result{}, nil
 }
 
-func (r *InstallEpinioReconciler) updateStatus(ctx context.Context, log logr.Logger, inst *epiniov1alpha1.InstallEpinio) error {
+func (r *InstallEpinioReconciler) updateStatus(ctx context.Context, inst *epiniov1alpha1.InstallEpinio) error {
+	log := logf.FromContext(ctx)
 	inst.Status.LastUpdateTime = metav1.Now()
 	if err := r.Status().Update(ctx, inst); err != nil {
 		log.Error(err, "failed to update status")
@@ -390,7 +392,8 @@ func (r *InstallEpinioReconciler) setOwnedByInstall(inst *epiniov1alpha1.Install
 	return controllerutil.SetControllerReference(inst, obj, r.Scheme)
 }
 
-func (r *InstallEpinioReconciler) deleteIfExists(ctx context.Context, obj client.Object, kind string, log logr.Logger) error {
+func (r *InstallEpinioReconciler) deleteIfExists(ctx context.Context, obj client.Object, kind string) error {
+	log := logf.FromContext(ctx)
 	if err := r.Delete(ctx, obj); err != nil {
 		if apierrors.IsNotFound(err) {
 			return nil
