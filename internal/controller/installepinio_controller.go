@@ -251,21 +251,21 @@ func (r *InstallEpinioReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	// Update status from Job
 	succeeded := job.Status.Succeeded
 	failed := job.Status.Failed
-	if succeeded > 0 {
-		log.Info("Install Job completed successfully", "job", jobName, "namespace", ctrlNs, "succeeded", succeeded)
-		setCondition(&inst, metav1.Condition{
-			Type:    conditionAvailable,
-			Status:  metav1.ConditionTrue,
-			Reason:  "Installed",
-			Message: "Epinio installed successfully",
-		})
-	} else if failed > 0 {
+	if failed > 0 {
 		log.Info("Install Job reported failure", "job", jobName, "namespace", ctrlNs, "failed", failed)
 		setCondition(&inst, metav1.Condition{
 			Type:    conditionDegraded,
 			Status:  metav1.ConditionTrue,
 			Reason:  "InstallFailed",
 			Message: fmt.Sprintf("Install Job failed (%d failed)", failed),
+		})
+	} else if succeeded > 0 {
+		log.Info("Install Job completed successfully", "job", jobName, "namespace", ctrlNs, "succeeded", succeeded)
+		setCondition(&inst, metav1.Condition{
+			Type:    conditionAvailable,
+			Status:  metav1.ConditionTrue,
+			Reason:  "Installed",
+			Message: "Epinio installed successfully",
 		})
 	} else {
 		log.Info("Install Job still running", "job", jobName, "namespace", ctrlNs)
