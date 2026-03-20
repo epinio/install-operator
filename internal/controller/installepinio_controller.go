@@ -40,19 +40,29 @@ import (
 // Install script runs in the Job container (helm + sh). Uses env DOMAIN and EPINIO_NAMESPACE.
 const installScript = `#!/bin/sh
 set -e
-echo "Epinio installer: domain=${DOMAIN}, epinio namespace=${EPINIO_NAMESPACE}"
+NGINX_RELEASE="${NGINX_RELEASE_NAME:-ingress-nginx}"
+CERTMGR_RELEASE="${CERT_MANAGER_RELEASE_NAME:-cert-manager}"
+echo "Epinio installer: domain=${DOMAIN}, epinio namespace=${EPINIO_NAMESPACE}, nginx release=${NGINX_RELEASE}, cert-manager release=${CERTMGR_RELEASE}"
 helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx 2>/dev/null || true
 helm repo add jetstack https://charts.jetstack.io 2>/dev/null || true
 helm repo add epinio https://epinio.github.io/helm-charts 2>/dev/null || true
 helm repo update
-helm upgrade --install ingress-nginx ingress-nginx/ingress-nginx \
-  --namespace ingress-nginx --create-namespace \
-  --set controller.ingressClassResource.default=true \
-  --set controller.service.type=LoadBalancer
-helm upgrade --install cert-manager jetstack/cert-manager \
-  --namespace cert-manager --create-namespace \
-  --set crds.enabled=true \
-  --set extraArgs={--enable-certificate-owner-ref=true}
+if helm status "${NGINX_RELEASE}" --namespace ingress-nginx >/dev/null 2>&1; then
+  echo "ingress-nginx release '${NGINX_RELEASE}' already installed, skipping"
+else
+  helm upgrade --install "${NGINX_RELEASE}" ingress-nginx/ingress-nginx \
+    --namespace ingress-nginx --create-namespace \
+    --set controller.ingressClassResource.default=true \
+    --set controller.service.type=LoadBalancer
+fi
+if helm status "${CERTMGR_RELEASE}" --namespace cert-manager >/dev/null 2>&1; then
+  echo "cert-manager release '${CERTMGR_RELEASE}' already installed, skipping"
+else
+  helm upgrade --install "${CERTMGR_RELEASE}" jetstack/cert-manager \
+    --namespace cert-manager --create-namespace \
+    --set crds.enabled=true \
+    --set extraArgs={--enable-certificate-owner-ref=true}
+fi
 EPINIO_VERSION_ARGS=""
 if [ -n "${EPINIO_VERSION}" ]; then
   EPINIO_VERSION_ARGS="--version ${EPINIO_VERSION}"
@@ -136,6 +146,8 @@ func (r *InstallEpinioReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		epinioNs = "epinio"
 	}
 	version := strings.TrimSpace(inst.Spec.Version)
+	nginxRelease := strings.TrimSpace(inst.Spec.NginxReleaseName)
+	certManagerRelease := strings.TrimSpace(inst.Spec.CertManagerReleaseName)
 
 	// Ensure epinio namespace exists (optional; helm --create-namespace will create it too)
 	ns := &corev1.Namespace{}
@@ -205,7 +217,7 @@ func (r *InstallEpinioReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		}
 
 		// Create Job in controller namespace so it can use the controller's service account.
-		job = r.buildInstallJob(jobName, ctrlNs, cmName, domain, epinioNs, version)
+		job = r.buildInstallJob(jobName, ctrlNs, cmName, domain, epinioNs, version, nginxRelease, certManagerRelease)
 		job.Labels = map[string]string{
 			"install-epinio.io/cr-namespace": inst.Namespace,
 			"install-epinio.io/cr-name":      inst.Name,
@@ -286,7 +298,7 @@ func (r *InstallEpinioReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	return ctrl.Result{}, nil
 }
 
-func (r *InstallEpinioReconciler) buildInstallJob(name, namespace, configMapName, domain, epinioNs, version string) *batchv1.Job {
+func (r *InstallEpinioReconciler) buildInstallJob(name, namespace, configMapName, domain, epinioNs, version, nginxRelease, certManagerRelease string) *batchv1.Job {
 	one := int32(1)
 	mode := int32(0555)
 	return &batchv1.Job{
@@ -306,6 +318,8 @@ func (r *InstallEpinioReconciler) buildInstallJob(name, namespace, configMapName
 								{Name: "DOMAIN", Value: domain},
 								{Name: "EPINIO_NAMESPACE", Value: epinioNs},
 								{Name: "EPINIO_VERSION", Value: version},
+								{Name: "NGINX_RELEASE_NAME", Value: nginxRelease},
+								{Name: "CERT_MANAGER_RELEASE_NAME", Value: certManagerRelease},
 							},
 							VolumeMounts: []corev1.VolumeMount{
 								{Name: "scripts", MountPath: "/scripts", ReadOnly: true},

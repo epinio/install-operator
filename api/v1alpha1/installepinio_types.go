@@ -42,6 +42,22 @@ type InstallEpinioSpec struct {
 	// +kubebuilder:validation:Pattern=`^[a-z0-9]([-a-z0-9]*[a-z0-9])?$`
 	// +kubebuilder:validation:MaxLength=63
 	TargetNamespace string `json:"targetNamespace,omitempty"`
+	// NginxReleaseName is the Helm release name to use for ingress-nginx.
+	// Defaults to "ingress-nginx". Set this to the name of an existing release
+	// to adopt it instead of creating a new one.
+	// +optional
+	// +kubebuilder:validation:Pattern=`^[a-z0-9]([-a-z0-9]*[a-z0-9])?$`
+	// +kubebuilder:validation:MaxLength=63
+	NginxReleaseName string `json:"nginxReleaseName,omitempty"`
+
+	// CertManagerReleaseName is the Helm release name to use for cert-manager.
+	// Defaults to "cert-manager". Set this to the name of an existing release
+	// to adopt it instead of creating a new one.
+	// +optional
+	// +kubebuilder:validation:Pattern=`^[a-z0-9]([-a-z0-9]*[a-z0-9])?$`
+	// +kubebuilder:validation:MaxLength=63
+	CertManagerReleaseName string `json:"certManagerReleaseName,omitempty"`
+
 	// +optional
 	ImagePullSecret string `json:"imagePullSecret,omitempty"`
 	// +optional
