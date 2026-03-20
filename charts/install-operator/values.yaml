@@ -1,0 +1,26 @@
+# Namespace where the operator runs and where InstallEpinio CRs are created.
+namespace: epinio-system
+
+image:
+  repository: ghcr.io/epinio/install-operator
+  tag: ""          # defaults to Chart.appVersion
+  pullPolicy: IfNotPresent
+
+# Container image used by the Helm installer Job.
+installerHelmImage: alpine/helm:3.18
+
+replicaCount: 1
+
+resources:
+  limits:
+    cpu: 500m
+    memory: 128Mi
+  requests:
+    cpu: 10m
+    memory: 64Mi
+
+# Enable leader election when running multiple replicas.
+leaderElection: false
+
+serviceAccount:
+  name: controller-manager

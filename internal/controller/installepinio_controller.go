@@ -37,7 +37,8 @@ import (
 	epiniov1alpha1 "apps.example.com/install-epinio/api/v1alpha1"
 )
 
-// Install script runs in the Job container (helm + sh). Uses env DOMAIN and EPINIO_NAMESPACE.
+// Install script runs in the Job container (helm only — no kubectl in alpine/helm image).
+// Uses "helm status" to skip ingress-nginx and cert-manager if already installed.
 const installScript = `#!/bin/sh
 set -e
 NGINX_RELEASE="${NGINX_RELEASE_NAME:-ingress-nginx}"
@@ -50,23 +51,28 @@ helm repo update
 if helm status "${NGINX_RELEASE}" --namespace ingress-nginx >/dev/null 2>&1; then
   echo "ingress-nginx release '${NGINX_RELEASE}' already installed, skipping"
 else
+  echo "Installing ingress-nginx..."
   helm upgrade --install "${NGINX_RELEASE}" ingress-nginx/ingress-nginx \
     --namespace ingress-nginx --create-namespace \
     --set controller.ingressClassResource.default=true \
-    --set controller.service.type=LoadBalancer
+    --set controller.service.type=LoadBalancer \
+  || echo "Warning: ingress-nginx install failed (may already exist under a different release name, e.g. rke2-ingress-nginx) — continuing"
 fi
 if helm status "${CERTMGR_RELEASE}" --namespace cert-manager >/dev/null 2>&1; then
   echo "cert-manager release '${CERTMGR_RELEASE}' already installed, skipping"
 else
+  echo "Installing cert-manager..."
   helm upgrade --install "${CERTMGR_RELEASE}" jetstack/cert-manager \
     --namespace cert-manager --create-namespace \
     --set crds.enabled=true \
-    --set extraArgs={--enable-certificate-owner-ref=true}
+    --set extraArgs={--enable-certificate-owner-ref=true} \
+  || echo "Warning: cert-manager install failed (may already exist under a different release name) — continuing"
 fi
 EPINIO_VERSION_ARGS=""
 if [ -n "${EPINIO_VERSION}" ]; then
   EPINIO_VERSION_ARGS="--version ${EPINIO_VERSION}"
 fi
+echo "Installing Epinio (namespace=${EPINIO_NAMESPACE}, domain=${DOMAIN})..."
 helm upgrade --install epinio epinio/epinio \
   --namespace "${EPINIO_NAMESPACE}" --create-namespace \
   ${EPINIO_VERSION_ARGS} \
@@ -299,15 +305,17 @@ func (r *InstallEpinioReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 }
 
 func (r *InstallEpinioReconciler) buildInstallJob(name, namespace, configMapName, domain, epinioNs, version, nginxRelease, certManagerRelease string) *batchv1.Job {
-	one := int32(1)
+	backoffLimit := int32(0) // no retries - keep failed pod around for log inspection
+	ttl          := int32(300)       // delete job 5 min after completion
 	mode := int32(0555)
 	return &batchv1.Job{
 		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
 		Spec: batchv1.JobSpec{
-			BackoffLimit: &one,
+			BackoffLimit:            &backoffLimit,
+			TTLSecondsAfterFinished: &ttl,
 			Template: corev1.PodTemplateSpec{
 				Spec: corev1.PodSpec{
-					RestartPolicy:      corev1.RestartPolicyOnFailure,
+					RestartPolicy:      corev1.RestartPolicyNever,
 					ServiceAccountName: r.installerServiceAccount(),
 					Containers: []corev1.Container{
 						{
