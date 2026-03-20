@@ -1,0 +1,15 @@
+apiVersion: v2
+name: install-operator
+description: Kubernetes operator that installs Epinio on target clusters via an InstallEpinio custom resource.
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+keywords:
+  - epinio
+  - operator
+  - installer
+home: https://github.com/epinio/install-operator
+sources:
+  - https://github.com/epinio/install-operator
+maintainers:
+  - name: Epinio maintainers

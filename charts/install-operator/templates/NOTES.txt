@@ -1,0 +1,24 @@
+The Epinio install-operator has been deployed to namespace "{{ .Values.namespace }}".
+
+The operator watches for InstallEpinio custom resources in that namespace
+and installs Epinio on the cluster via Helm when one is created.
+
+To trigger an install manually:
+
+  kubectl apply -n {{ .Values.namespace }} -f - <<EOF
+  apiVersion: epinio.apps.example.com/v1alpha1
+  kind: InstallEpinio
+  metadata:
+    generateName: install-epinio-
+    namespace: {{ .Values.namespace }}
+  spec:
+    domain: your.domain.example.com
+    targetNamespace: epinio
+    version: 1.13.9
+  EOF
+
+To watch install progress:
+
+  kubectl get installepinio -n {{ .Values.namespace }} -w
+
+Or use the Epinio Rancher UI which will create the CR automatically.
