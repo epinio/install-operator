@@ -66,6 +66,30 @@ type InstallEpinioSpec struct {
 	ImageRegistryUsername string `json:"imageRegistryUsername,omitempty"`
 	// +optional
 	ImageRegistryPassword string `json:"imageRegistryPassword,omitempty"`
+
+	// NginxReleaseName is the existing Helm release name for ingress-nginx.
+	// If set, the operator will skip installing ingress-nginx and use this
+	// release name to verify it is present (e.g. "rke2-ingress-nginx").
+	// If empty, ingress-nginx will be installed fresh.
+	// +optional
+	NginxReleaseName string `json:"nginxReleaseName,omitempty"`
+
+	// NginxReleaseNamespace is the namespace of the existing ingress-nginx release.
+	// Defaults to "ingress-nginx" if NginxReleaseName is set but this is empty.
+	// +optional
+	NginxReleaseNamespace string `json:"nginxReleaseNamespace,omitempty"`
+
+	// CertManagerReleaseName is the existing Helm release name for cert-manager.
+	// If set, the operator will skip installing cert-manager and use this
+	// release name to verify it is present (e.g. "rancher-cert-manager").
+	// If empty, cert-manager will be installed fresh.
+	// +optional
+	CertManagerReleaseName string `json:"certManagerReleaseName,omitempty"`
+
+	// CertManagerReleaseNamespace is the namespace of the existing cert-manager release.
+	// Defaults to "cert-manager" if CertManagerReleaseName is set but this is empty.
+	// +optional
+	CertManagerReleaseNamespace string `json:"certManagerReleaseNamespace,omitempty"`
 }
 
 // InstallEpinioStatus defines the observed state of InstallEpinio.
