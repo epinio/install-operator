@@ -30,7 +30,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
-	"apps.example.com/install-epinio/test/utils"
+	"github.com/epinio/install-operator/test/utils"
 )
 
 // namespace where the project is deployed in

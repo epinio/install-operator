@@ -1,4 +1,4 @@
-apiVersion: epinio.apps.example.com/v1alpha1
+apiVersion: epinio.apps.epinio.io/v1alpha1
 kind: InstallEpinio
 metadata:
   labels:

@@ -30,7 +30,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	epiniov1alpha1 "apps.example.com/install-epinio/api/v1alpha1"
+	epiniov1alpha1 "github.com/epinio/install-operator/api/v1alpha1"
 )
 
 var _ = Describe("InstallEpinio Controller", func() {

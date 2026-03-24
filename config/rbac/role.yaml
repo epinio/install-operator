@@ -30,7 +30,7 @@ rules:
   - update
   - watch
 - apiGroups:
-  - epinio.apps.example.com
+  - epinio.apps.epinio.io
   resources:
   - installepinios
   verbs:
@@ -42,13 +42,13 @@ rules:
   - update
   - watch
 - apiGroups:
-  - epinio.apps.example.com
+  - epinio.apps.epinio.io
   resources:
   - installepinios/finalizers
   verbs:
   - update
 - apiGroups:
-  - epinio.apps.example.com
+  - epinio.apps.epinio.io
   resources:
   - installepinios/status
   verbs:

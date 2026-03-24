@@ -37,9 +37,9 @@ import (
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
-	epiniov1alpha1 "apps.example.com/install-epinio/api/v1alpha1"
-	"apps.example.com/install-epinio/internal/controller"
-	"apps.example.com/install-epinio/internal/ui"
+	epiniov1alpha1 "github.com/epinio/install-operator/api/v1alpha1"
+	"github.com/epinio/install-operator/internal/controller"
+	"github.com/epinio/install-operator/internal/ui"
 	// +kubebuilder:scaffold:imports
 )
 
@@ -172,7 +172,7 @@ func main() {
 		WebhookServer:          webhookServer,
 		HealthProbeBindAddress: probeAddr,
 		LeaderElection:         enableLeaderElection,
-		LeaderElectionID:       "ce2543ab.apps.example.com",
+		LeaderElectionID:       "ce2543ab.apps.epinio.io",
 		// LeaderElectionReleaseOnCancel defines if the leader should step down voluntarily
 		// when the Manager ends. This requires the binary to immediately end when the
 		// Manager is stopped, otherwise, this setting is unsafe. Setting this significantly

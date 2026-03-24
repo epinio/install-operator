@@ -34,7 +34,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
-	epiniov1alpha1 "apps.example.com/install-epinio/api/v1alpha1"
+	epiniov1alpha1 "github.com/epinio/install-operator/api/v1alpha1"
 )
 
 // Install script runs in the Job container (helm only — no kubectl in alpine/helm image).
@@ -97,7 +97,7 @@ echo "Epinio install completed successfully."
 const (
 	configMapNamePrefix            = "epinio-install-script-"
 	jobNamePrefix                  = "epinio-installer-"
-	installCleanupFinalizer        = "epinio.apps.example.com/install-cleanup"
+	installCleanupFinalizer        = "epinio.apps.epinio.io/install-cleanup"
 	conditionAvailable             = "Available"
 	conditionProgressing           = "Progressing"
 	conditionDegraded              = "Degraded"
@@ -115,9 +115,9 @@ type InstallEpinioReconciler struct {
 	InstallerHelmImage      string
 }
 
-// +kubebuilder:rbac:groups=epinio.apps.example.com,resources=installepinios,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=epinio.apps.example.com,resources=installepinios/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=epinio.apps.example.com,resources=installepinios/finalizers,verbs=update
+// +kubebuilder:rbac:groups=epinio.apps.epinio.io,resources=installepinios,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=epinio.apps.epinio.io,resources=installepinios/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=epinio.apps.epinio.io,resources=installepinios/finalizers,verbs=update
 // +kubebuilder:rbac:groups=batch,resources=jobs,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups="",resources=configmaps;namespaces,verbs=get;list;watch;create;update;patch;delete
 
@@ -186,6 +186,16 @@ func (r *InstallEpinioReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 
 	cmName := configMapName(inst.Namespace, inst.Name)
 	jobName := installJobName(inst.Namespace, inst.Name)
+	jobKey := client.ObjectKey{Namespace: ctrlNs, Name: jobName}
+
+	// If the current generation already reached a terminal state, just ensure
+	// installer artifacts are cleaned up and do not create new Jobs.
+	if isTerminalForGeneration(&inst) {
+		if err := r.cleanupInstallArtifacts(ctx, ctrlNs, cmName, jobName); err != nil {
+			return ctrl.Result{}, err
+		}
+		return ctrl.Result{}, nil
+	}
 
 	// Create or update ConfigMap in controller namespace so the install Job can mount the script.
 	cm := &corev1.ConfigMap{
@@ -229,7 +239,6 @@ func (r *InstallEpinioReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 
 	// Check for existing Job (in controller namespace)
 	job := &batchv1.Job{}
-	jobKey := client.ObjectKey{Namespace: ctrlNs, Name: jobName}
 	if err := r.Get(ctx, jobKey, job); err != nil {
 		if !apierrors.IsNotFound(err) {
 			log.Error(err, "failed to get install Job", "job", jobName, "namespace", ctrlNs)
@@ -320,12 +329,15 @@ func (r *InstallEpinioReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	if err := r.updateStatus(ctx, &inst); err != nil {
 		return ctrl.Result{}, err
 	}
+	if err := r.cleanupInstallArtifacts(ctx, ctrlNs, cmName, jobName); err != nil {
+		return ctrl.Result{}, err
+	}
 	return ctrl.Result{}, nil
 }
 
 func (r *InstallEpinioReconciler) buildInstallJob(name, namespace, configMapName, domain, epinioNs, version, nginxRelease, nginxNs, certManagerRelease, certManagerNs string) *batchv1.Job {
 	backoffLimit := int32(0) // no retries - keep failed pod around for log inspection
-	ttl          := int32(300)       // delete job 5 min after completion
+	ttl := int32(300)        // delete job 5 min after completion
 	mode := int32(0555)
 	return &batchv1.Job{
 		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
@@ -341,15 +353,15 @@ func (r *InstallEpinioReconciler) buildInstallJob(name, namespace, configMapName
 							Name:    "installer",
 							Image:   r.installerHelmImage(),
 							Command: []string{"/bin/sh", "/scripts/install.sh"},
-						Env: []corev1.EnvVar{
-							{Name: "DOMAIN", Value: domain},
-							{Name: "EPINIO_NAMESPACE", Value: epinioNs},
-							{Name: "EPINIO_VERSION", Value: version},
-							{Name: "NGINX_RELEASE_NAME", Value: nginxRelease},
-							{Name: "NGINX_RELEASE_NS", Value: nginxNs},
-							{Name: "CERTMANAGER_RELEASE_NAME", Value: certManagerRelease},
-							{Name: "CERTMANAGER_RELEASE_NS", Value: certManagerNs},
-						},
+							Env: []corev1.EnvVar{
+								{Name: "DOMAIN", Value: domain},
+								{Name: "EPINIO_NAMESPACE", Value: epinioNs},
+								{Name: "EPINIO_VERSION", Value: version},
+								{Name: "NGINX_RELEASE_NAME", Value: nginxRelease},
+								{Name: "NGINX_RELEASE_NS", Value: nginxNs},
+								{Name: "CERTMANAGER_RELEASE_NAME", Value: certManagerRelease},
+								{Name: "CERTMANAGER_RELEASE_NS", Value: certManagerNs},
+							},
 							VolumeMounts: []corev1.VolumeMount{
 								{Name: "scripts", MountPath: "/scripts", ReadOnly: true},
 							},
@@ -447,6 +459,27 @@ func (r *InstallEpinioReconciler) deleteIfExists(ctx context.Context, obj client
 
 	log.Info("Deleted owned resource during cleanup", "kind", kind, "name", obj.GetName(), "namespace", obj.GetNamespace())
 	return nil
+}
+
+func (r *InstallEpinioReconciler) cleanupInstallArtifacts(ctx context.Context, ctrlNs, cmName, jobName string) error {
+	if err := r.deleteIfExists(ctx, &batchv1.Job{ObjectMeta: metav1.ObjectMeta{Name: jobName, Namespace: ctrlNs}}, "Job"); err != nil {
+		return err
+	}
+	if err := r.deleteIfExists(ctx, &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: cmName, Namespace: ctrlNs}}, "ConfigMap"); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func isTerminalForGeneration(inst *epiniov1alpha1.InstallEpinio) bool {
+	available := meta.FindStatusCondition(inst.Status.Conditions, conditionAvailable)
+	if available != nil && available.ObservedGeneration == inst.Generation && available.Status == metav1.ConditionTrue {
+		return true
+	}
+
+	degraded := meta.FindStatusCondition(inst.Status.Conditions, conditionDegraded)
+	return degraded != nil && degraded.ObservedGeneration == inst.Generation && degraded.Status == metav1.ConditionTrue
 }
 
 func (r *InstallEpinioReconciler) controllerNamespace() string {

@@ -1,4 +1,4 @@
-module apps.example.com/install-epinio
+module github.com/epinio/install-operator
 
 go 1.25.3
 

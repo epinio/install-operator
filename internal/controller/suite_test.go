@@ -33,7 +33,7 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
-	epiniov1alpha1 "apps.example.com/install-epinio/api/v1alpha1"
+	epiniov1alpha1 "github.com/epinio/install-operator/api/v1alpha1"
 	// +kubebuilder:scaffold:imports
 )
 

@@ -4,9 +4,9 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.20.1
-  name: installepinios.epinio.apps.example.com
+  name: installepinios.epinio.apps.epinio.io
 spec:
-  group: epinio.apps.example.com
+  group: epinio.apps.epinio.io
   names:
     kind: InstallEpinio
     listKind: InstallEpinioList

@@ -1,7 +1,7 @@
 # This rule is not used by the project epinio itself.
 # It is provided to allow the cluster admin to help manage permissions for users.
 #
-# Grants read-only access to epinio.apps.example.com resources.
+# Grants read-only access to epinio.apps.epinio.io resources.
 # This role is intended for users who need visibility into these resources
 # without permissions to modify them. It is ideal for monitoring purposes and limited-access viewing.
 
@@ -14,7 +14,7 @@ metadata:
   name: installepinio-viewer-role
 rules:
 - apiGroups:
-  - epinio.apps.example.com
+  - epinio.apps.epinio.io
   resources:
   - installepinios
   verbs:
@@ -22,7 +22,7 @@ rules:
   - list
   - watch
 - apiGroups:
-  - epinio.apps.example.com
+  - epinio.apps.epinio.io
   resources:
   - installepinios/status
   verbs:

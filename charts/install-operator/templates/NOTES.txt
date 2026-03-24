@@ -6,7 +6,7 @@ and installs Epinio on the cluster via Helm when one is created.
 To trigger an install manually:
 
   kubectl apply -n {{ .Values.namespace }} -f - <<EOF
-  apiVersion: epinio.apps.example.com/v1alpha1
+  apiVersion: epinio.apps.epinio.io/v1alpha1
   kind: InstallEpinio
   metadata:
     generateName: install-epinio-

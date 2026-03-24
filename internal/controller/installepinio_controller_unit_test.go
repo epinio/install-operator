@@ -16,7 +16,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
-	epiniov1alpha1 "apps.example.com/install-epinio/api/v1alpha1"
+	epiniov1alpha1 "github.com/epinio/install-operator/api/v1alpha1"
 )
 
 func TestReconcileSetsDegradedConditionWhenJobCreationFails(t *testing.T) {
@@ -138,6 +138,60 @@ func TestReconcileDeleteCleansCrossNamespaceResources(t *testing.T) {
 		t.Fatalf("get cleaned configmap: %v", err)
 	} else if err == nil {
 		t.Fatalf("expected configmap to be deleted during cleanup")
+	}
+}
+
+func TestReconcileTerminalStateCleansArtifactsAndDoesNotRecreateJob(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	jobName := installJobName("system", "demo")
+	cmName := configMapName("system", "demo")
+	reconciler, k8sClient := newUnitTestReconciler(t,
+		nil,
+		nil,
+		&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "system"}},
+		&corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: cmName, Namespace: "system"}},
+		&batchv1.Job{
+			ObjectMeta: metav1.ObjectMeta{Name: jobName, Namespace: "system"},
+			Status:     batchv1.JobStatus{Succeeded: 1},
+		},
+		&epiniov1alpha1.InstallEpinio{
+			ObjectMeta: metav1.ObjectMeta{Name: "demo", Namespace: "system"},
+			Spec: epiniov1alpha1.InstallEpinioSpec{
+				Domain:          "demo.example.test",
+				TargetNamespace: "epinio",
+			},
+		},
+	)
+
+	req := ctrl.Request{NamespacedName: client.ObjectKey{Name: "demo", Namespace: "system"}}
+	if _, err := reconciler.Reconcile(ctx, req); err != nil {
+		t.Fatalf("first reconcile should only add the finalizer: %v", err)
+	}
+	if _, err := reconciler.Reconcile(ctx, req); err != nil {
+		t.Fatalf("second reconcile should process succeeded job: %v", err)
+	}
+
+	if err := k8sClient.Get(ctx, client.ObjectKey{Name: jobName, Namespace: "system"}, &batchv1.Job{}); client.IgnoreNotFound(err) != nil {
+		t.Fatalf("get cleaned job: %v", err)
+	} else if err == nil {
+		t.Fatalf("expected install job to be deleted after terminal state")
+	}
+	if err := k8sClient.Get(ctx, client.ObjectKey{Name: cmName, Namespace: "system"}, &corev1.ConfigMap{}); client.IgnoreNotFound(err) != nil {
+		t.Fatalf("get cleaned configmap: %v", err)
+	} else if err == nil {
+		t.Fatalf("expected install script configmap to be deleted after terminal state")
+	}
+
+	// Third reconcile should not recreate a new installer Job for the same generation.
+	if _, err := reconciler.Reconcile(ctx, req); err != nil {
+		t.Fatalf("third reconcile should be a terminal no-op: %v", err)
+	}
+	if err := k8sClient.Get(ctx, client.ObjectKey{Name: jobName, Namespace: "system"}, &batchv1.Job{}); client.IgnoreNotFound(err) != nil {
+		t.Fatalf("get job after terminal no-op: %v", err)
+	} else if err == nil {
+		t.Fatalf("expected no job recreation once install is terminal for current generation")
 	}
 }
 

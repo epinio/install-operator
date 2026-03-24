@@ -3,19 +3,19 @@
 # and allow the plugins properly work.
 # More info: https://book.kubebuilder.io/reference/project-config.html
 cliVersion: 4.13.0
-domain: apps.example.com
+domain: apps.epinio.io
 layout:
 - go.kubebuilder.io/v4
 projectName: epinio
-repo: apps.example.com/install-epinio
+repo: github.com/epinio/install-operator
 resources:
 - api:
     crdVersion: v1
     namespaced: true
   controller: true
-  domain: apps.example.com
+  domain: apps.epinio.io
   group: epinio
   kind: InstallEpinio
-  path: apps.example.com/install-epinio/api/v1alpha1
+  path: github.com/epinio/install-operator/api/v1alpha1
   version: v1alpha1
 version: "3"

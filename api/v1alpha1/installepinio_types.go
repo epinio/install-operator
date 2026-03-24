@@ -42,22 +42,6 @@ type InstallEpinioSpec struct {
 	// +kubebuilder:validation:Pattern=`^[a-z0-9]([-a-z0-9]*[a-z0-9])?$`
 	// +kubebuilder:validation:MaxLength=63
 	TargetNamespace string `json:"targetNamespace,omitempty"`
-	// NginxReleaseName is the Helm release name to use for ingress-nginx.
-	// Defaults to "ingress-nginx". Set this to the name of an existing release
-	// to adopt it instead of creating a new one.
-	// +optional
-	// +kubebuilder:validation:Pattern=`^[a-z0-9]([-a-z0-9]*[a-z0-9])?$`
-	// +kubebuilder:validation:MaxLength=63
-	NginxReleaseName string `json:"nginxReleaseName,omitempty"`
-
-	// CertManagerReleaseName is the Helm release name to use for cert-manager.
-	// Defaults to "cert-manager". Set this to the name of an existing release
-	// to adopt it instead of creating a new one.
-	// +optional
-	// +kubebuilder:validation:Pattern=`^[a-z0-9]([-a-z0-9]*[a-z0-9])?$`
-	// +kubebuilder:validation:MaxLength=63
-	CertManagerReleaseName string `json:"certManagerReleaseName,omitempty"`
-
 	// +optional
 	ImagePullSecret string `json:"imagePullSecret,omitempty"`
 	// +optional
@@ -72,11 +56,15 @@ type InstallEpinioSpec struct {
 	// release name to verify it is present (e.g. "rke2-ingress-nginx").
 	// If empty, ingress-nginx will be installed fresh.
 	// +optional
+	// +kubebuilder:validation:Pattern=`^[a-z0-9]([-a-z0-9]*[a-z0-9])?$`
+	// +kubebuilder:validation:MaxLength=63
 	NginxReleaseName string `json:"nginxReleaseName,omitempty"`
 
 	// NginxReleaseNamespace is the namespace of the existing ingress-nginx release.
 	// Defaults to "ingress-nginx" if NginxReleaseName is set but this is empty.
 	// +optional
+	// +kubebuilder:validation:Pattern=`^[a-z0-9]([-a-z0-9]*[a-z0-9])?$`
+	// +kubebuilder:validation:MaxLength=63
 	NginxReleaseNamespace string `json:"nginxReleaseNamespace,omitempty"`
 
 	// CertManagerReleaseName is the existing Helm release name for cert-manager.
@@ -84,11 +72,15 @@ type InstallEpinioSpec struct {
 	// release name to verify it is present (e.g. "rancher-cert-manager").
 	// If empty, cert-manager will be installed fresh.
 	// +optional
+	// +kubebuilder:validation:Pattern=`^[a-z0-9]([-a-z0-9]*[a-z0-9])?$`
+	// +kubebuilder:validation:MaxLength=63
 	CertManagerReleaseName string `json:"certManagerReleaseName,omitempty"`
 
 	// CertManagerReleaseNamespace is the namespace of the existing cert-manager release.
 	// Defaults to "cert-manager" if CertManagerReleaseName is set but this is empty.
 	// +optional
+	// +kubebuilder:validation:Pattern=`^[a-z0-9]([-a-z0-9]*[a-z0-9])?$`
+	// +kubebuilder:validation:MaxLength=63
 	CertManagerReleaseNamespace string `json:"certManagerReleaseNamespace,omitempty"`
 }
 
