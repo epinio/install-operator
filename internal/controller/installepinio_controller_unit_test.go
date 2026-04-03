@@ -85,6 +85,72 @@ func TestJobTerminalHelpers(t *testing.T) {
 	}
 }
 
+func TestReconcileMarksDegradedWhenJobFailed(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	jobName := installJobName("system", "test-resource")
+	cmName := configMapName("system", "test-resource")
+	now := metav1.Now()
+	reconciler, k8sClient := newUnitTestReconciler(t,
+		nil,
+		nil,
+		&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "system"}},
+		&corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: cmName, Namespace: "system"}},
+		&batchv1.Job{
+			ObjectMeta: metav1.ObjectMeta{Name: jobName, Namespace: "system"},
+			Status: batchv1.JobStatus{
+				StartTime: &now,
+				Failed:    1,
+				Conditions: []batchv1.JobCondition{
+					{Type: batchv1.JobFailureTarget, Status: corev1.ConditionTrue, LastProbeTime: now, LastTransitionTime: now},
+					{Type: batchv1.JobFailed, Status: corev1.ConditionTrue, LastProbeTime: now, LastTransitionTime: now, Reason: "BackoffLimitExceeded"},
+				},
+			},
+		},
+		&epiniov1alpha1.InstallEpinio{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:       "test-resource",
+				Namespace:  "system",
+				Finalizers: []string{installCleanupFinalizer},
+			},
+			Spec: epiniov1alpha1.InstallEpinioSpec{
+				Domain:          "demo.example.test",
+				TargetNamespace: "epinio",
+				Version:         "1.0.0",
+			},
+		},
+	)
+
+	req := ctrl.Request{NamespacedName: client.ObjectKey{Name: "test-resource", Namespace: "system"}}
+	if _, err := reconciler.Reconcile(ctx, req); err != nil {
+		t.Fatalf("reconcile: %v", err)
+	}
+
+	var install epiniov1alpha1.InstallEpinio
+	if err := k8sClient.Get(ctx, req.NamespacedName, &install); err != nil {
+		t.Fatalf("get install: %v", err)
+	}
+	cond := meta.FindStatusCondition(install.Status.Conditions, conditionDegraded)
+	if cond == nil || cond.Status != metav1.ConditionTrue || cond.Reason != "InstallFailed" {
+		t.Fatalf("expected Degraded InstallFailed condition, got %+v", cond)
+	}
+	if meta.FindStatusCondition(install.Status.Conditions, conditionProgressing) != nil {
+		t.Fatalf("expected Progressing removed when degraded")
+	}
+
+	if err := k8sClient.Get(ctx, client.ObjectKey{Name: jobName, Namespace: "system"}, &batchv1.Job{}); client.IgnoreNotFound(err) != nil {
+		t.Fatalf("get job: %v", err)
+	} else if err == nil {
+		t.Fatalf("expected install job to be deleted after terminal failure")
+	}
+	if err := k8sClient.Get(ctx, client.ObjectKey{Name: cmName, Namespace: "system"}, &corev1.ConfigMap{}); client.IgnoreNotFound(err) != nil {
+		t.Fatalf("get configmap: %v", err)
+	} else if err == nil {
+		t.Fatalf("expected install script configmap to be deleted after terminal failure")
+	}
+}
+
 func TestReconcileSetsDegradedConditionWhenJobCreationFails(t *testing.T) {
 	t.Parallel()
 
@@ -310,7 +376,7 @@ func newUnitTestReconciler(t *testing.T, createJobErr, statusUpdateErr error, ob
 
 	baseClient := fake.NewClientBuilder().
 		WithScheme(scheme).
-		WithStatusSubresource(&epiniov1alpha1.InstallEpinio{}).
+		WithStatusSubresource(&epiniov1alpha1.InstallEpinio{}, &batchv1.Job{}).
 		WithObjects(objects...).
 		Build()
 

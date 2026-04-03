@@ -18,7 +18,6 @@ package controller
 
 import (
 	"context"
-	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -147,68 +146,6 @@ var _ = Describe("InstallEpinio Controller", func() {
 			updated := &epiniov1alpha1.InstallEpinio{}
 			Expect(k8sClient.Get(ctx, typeNamespacedName, updated)).To(Succeed())
 			Expect(meta.IsStatusConditionTrue(updated.Status.Conditions, "Available")).To(BeTrue())
-			Expect(meta.FindStatusCondition(updated.Status.Conditions, "Progressing")).To(BeNil())
-		})
-
-		It("marks the install degraded when the Job fails", func() {
-			_, err := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: typeNamespacedName})
-			Expect(err).NotTo(HaveOccurred())
-			_, err = reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: typeNamespacedName})
-			Expect(err).NotTo(HaveOccurred())
-
-			jobKey := types.NamespacedName{Name: "epinio-installer-system-test-resource", Namespace: "system"}
-			job := &batchv1.Job{}
-			Expect(k8sClient.Get(ctx, jobKey, job)).To(Succeed())
-
-			// Suspend before the batch controller can mark the Job complete; K8s 1.35+ rejects
-			// lowering status.succeeded and requires FailureTarget before Failed on conditions.
-			suspend := true
-			job.Spec.Suspend = &suspend
-			Expect(k8sClient.Update(ctx, job)).To(Succeed())
-
-			Eventually(func(g Gomega) {
-				g.Expect(k8sClient.Get(ctx, jobKey, job)).To(Succeed())
-				g.Expect(job.Status.Succeeded).To(BeNumerically("==", 0), "job must not complete before we simulate failure")
-			}).WithTimeout(10 * time.Second).WithPolling(50 * time.Millisecond).Should(Succeed())
-
-			now := metav1.Now()
-			if job.Status.StartTime == nil {
-				job.Status.StartTime = &now
-			}
-			job.Status.Failed = 1
-			var kept []batchv1.JobCondition
-			for _, c := range job.Status.Conditions {
-				switch c.Type {
-				case batchv1.JobFailureTarget, batchv1.JobFailed, batchv1.JobComplete:
-					continue
-				default:
-					kept = append(kept, c)
-				}
-			}
-			job.Status.Conditions = append(kept,
-				batchv1.JobCondition{
-					Type:               batchv1.JobFailureTarget,
-					Status:             corev1.ConditionTrue,
-					LastProbeTime:      now,
-					LastTransitionTime: now,
-				},
-				batchv1.JobCondition{
-					Type:               batchv1.JobFailed,
-					Status:             corev1.ConditionTrue,
-					LastProbeTime:      now,
-					LastTransitionTime: now,
-					Reason:             "BackoffLimitExceeded",
-					Message:            "Job has reached the specified backoff limit",
-				},
-			)
-			Expect(k8sClient.Status().Update(ctx, job)).To(Succeed())
-
-			_, err = reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: typeNamespacedName})
-			Expect(err).NotTo(HaveOccurred())
-
-			updated := &epiniov1alpha1.InstallEpinio{}
-			Expect(k8sClient.Get(ctx, typeNamespacedName, updated)).To(Succeed())
-			Expect(meta.IsStatusConditionTrue(updated.Status.Conditions, "Degraded")).To(BeTrue())
 			Expect(meta.FindStatusCondition(updated.Status.Conditions, "Progressing")).To(BeNil())
 		})
 	})
