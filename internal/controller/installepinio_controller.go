@@ -197,44 +197,8 @@ func (r *InstallEpinioReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		return ctrl.Result{}, nil
 	}
 
-	// Create or update ConfigMap in controller namespace so the install Job can mount the script.
-	cm := &corev1.ConfigMap{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      cmName,
-			Namespace: ctrlNs,
-			Labels: map[string]string{
-				"install-epinio.io/cr-namespace": inst.Namespace,
-				"install-epinio.io/cr-name":      inst.Name,
-			},
-		},
-		Data: map[string]string{"install.sh": installScript},
-	}
-	if err := r.setOwnedByInstall(&inst, cm); err != nil {
+	if err := r.reconcileInstallConfigMap(ctx, &inst, ctrlNs, cmName); err != nil {
 		return ctrl.Result{}, err
-	}
-
-	existingCM := &corev1.ConfigMap{}
-	if err := r.Get(ctx, client.ObjectKeyFromObject(cm), existingCM); err != nil {
-		if apierrors.IsNotFound(err) {
-			if err := r.Create(ctx, cm); err != nil {
-				log.Error(err, "failed to create ConfigMap", "configMap", cmName, "namespace", ctrlNs)
-				return ctrl.Result{}, err
-			}
-			log.Info("Created install script ConfigMap", "configMap", cmName, "namespace", ctrlNs)
-		} else {
-			log.Error(err, "failed to get ConfigMap", "configMap", cmName, "namespace", ctrlNs)
-			return ctrl.Result{}, err
-		}
-	} else {
-		existingCM.Data = cm.Data
-		if err := r.setOwnedByInstall(&inst, existingCM); err != nil {
-			return ctrl.Result{}, err
-		}
-		if err := r.Update(ctx, existingCM); err != nil {
-			log.Error(err, "failed to update ConfigMap", "configMap", cmName, "namespace", ctrlNs)
-			return ctrl.Result{}, err
-		}
-		log.Info("Updated install script ConfigMap", "configMap", cmName, "namespace", ctrlNs)
 	}
 
 	// Check for existing Job (in controller namespace)
@@ -333,6 +297,50 @@ func (r *InstallEpinioReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		return ctrl.Result{}, err
 	}
 	return ctrl.Result{}, nil
+}
+
+// reconcileInstallConfigMap creates or updates the install script ConfigMap in the controller namespace.
+func (r *InstallEpinioReconciler) reconcileInstallConfigMap(ctx context.Context, inst *epiniov1alpha1.InstallEpinio, ctrlNs, cmName string) error {
+	log := logf.FromContext(ctx)
+	cm := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      cmName,
+			Namespace: ctrlNs,
+			Labels: map[string]string{
+				"install-epinio.io/cr-namespace": inst.Namespace,
+				"install-epinio.io/cr-name":      inst.Name,
+			},
+		},
+		Data: map[string]string{"install.sh": installScript},
+	}
+	if err := r.setOwnedByInstall(inst, cm); err != nil {
+		return err
+	}
+
+	existingCM := &corev1.ConfigMap{}
+	if err := r.Get(ctx, client.ObjectKeyFromObject(cm), existingCM); err != nil {
+		if apierrors.IsNotFound(err) {
+			if err := r.Create(ctx, cm); err != nil {
+				log.Error(err, "failed to create ConfigMap", "configMap", cmName, "namespace", ctrlNs)
+				return err
+			}
+			log.Info("Created install script ConfigMap", "configMap", cmName, "namespace", ctrlNs)
+			return nil
+		}
+		log.Error(err, "failed to get ConfigMap", "configMap", cmName, "namespace", ctrlNs)
+		return err
+	}
+
+	existingCM.Data = cm.Data
+	if err := r.setOwnedByInstall(inst, existingCM); err != nil {
+		return err
+	}
+	if err := r.Update(ctx, existingCM); err != nil {
+		log.Error(err, "failed to update ConfigMap", "configMap", cmName, "namespace", ctrlNs)
+		return err
+	}
+	log.Info("Updated install script ConfigMap", "configMap", cmName, "namespace", ctrlNs)
+	return nil
 }
 
 func (r *InstallEpinioReconciler) buildInstallJob(name, namespace, configMapName, domain, epinioNs, version, nginxRelease, nginxNs, certManagerRelease, certManagerNs string) *batchv1.Job {
