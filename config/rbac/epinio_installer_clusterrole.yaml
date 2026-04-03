@@ -1,0 +1,35 @@
+# Grants the controller-manager SA permissions needed for the install Job to run
+# helm install (create resources in ingress-nginx, cert-manager, epinio namespaces).
+# Required because the install Job runs as controller-manager.
+# Remove or restrict this in production if you use a dedicated installer SA.
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: epinio-installer
+  labels:
+    app.kubernetes.io/name: epinio
+    app.kubernetes.io/managed-by: kustomize
+rules:
+  - apiGroups: ["*"]
+    resources: ["*"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: [""]
+    resources: ["namespaces"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: epinio-installer-binding
+  labels:
+    app.kubernetes.io/name: epinio
+    app.kubernetes.io/managed-by: kustomize
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: epinio-installer
+subjects:
+  - kind: ServiceAccount
+    name: controller-manager
+    namespace: system
