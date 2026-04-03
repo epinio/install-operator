@@ -258,18 +258,22 @@ func (r *InstallEpinioReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
 	}
 
-	// Update status from Job
-	succeeded := job.Status.Succeeded
-	failed := job.Status.Failed
-	if failed > 0 {
+	// Update status from Job (conditions are authoritative on modern Kubernetes; counters remain a fallback.)
+	if jobTerminalFailed(job.Status) {
+		failed := job.Status.Failed
 		log.Info("Install Job reported failure", "job", jobName, "namespace", ctrlNs, "failed", failed)
+		failMsg := fmt.Sprintf("Install Job failed (%d failed)", failed)
+		if failed == 0 {
+			failMsg = "Install Job failed"
+		}
 		setCondition(&inst, metav1.Condition{
 			Type:    conditionDegraded,
 			Status:  metav1.ConditionTrue,
 			Reason:  "InstallFailed",
-			Message: fmt.Sprintf("Install Job failed (%d failed)", failed),
+			Message: failMsg,
 		})
-	} else if succeeded > 0 {
+	} else if jobTerminalSucceeded(job.Status) {
+		succeeded := job.Status.Succeeded
 		log.Info("Install Job completed successfully", "job", jobName, "namespace", ctrlNs, "succeeded", succeeded)
 		setCondition(&inst, metav1.Condition{
 			Type:    conditionAvailable,
@@ -520,6 +524,27 @@ func configMapName(namespace, name string) string {
 
 func installJobName(namespace, name string) string {
 	return jobNamePrefix + namespace + "-" + name
+}
+
+func jobTerminalFailed(status batchv1.JobStatus) bool {
+	for i := range status.Conditions {
+		if status.Conditions[i].Type == batchv1.JobFailed && status.Conditions[i].Status == corev1.ConditionTrue {
+			return true
+		}
+	}
+	return status.Failed > 0
+}
+
+func jobTerminalSucceeded(status batchv1.JobStatus) bool {
+	if jobTerminalFailed(status) {
+		return false
+	}
+	for i := range status.Conditions {
+		if status.Conditions[i].Type == batchv1.JobComplete && status.Conditions[i].Status == corev1.ConditionTrue {
+			return true
+		}
+	}
+	return status.Succeeded > 0
 }
 
 func summarizeConditions(conditions []metav1.Condition) []string {

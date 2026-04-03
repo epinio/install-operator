@@ -19,6 +19,72 @@ import (
 	epiniov1alpha1 "github.com/epinio/install-operator/api/v1alpha1"
 )
 
+func TestJobTerminalHelpers(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		status   batchv1.JobStatus
+		wantFail bool
+		wantOK   bool
+	}{
+		{
+			name:     "failed counter",
+			status:   batchv1.JobStatus{Failed: 1},
+			wantFail: true,
+		},
+		{
+			name: "failed condition",
+			status: batchv1.JobStatus{
+				Conditions: []batchv1.JobCondition{
+					{Type: batchv1.JobFailed, Status: corev1.ConditionTrue},
+				},
+			},
+			wantFail: true,
+		},
+		{
+			name:   "succeeded counter only",
+			status: batchv1.JobStatus{Succeeded: 1},
+			wantOK: true,
+		},
+		{
+			name: "complete condition",
+			status: batchv1.JobStatus{
+				Conditions: []batchv1.JobCondition{
+					{Type: batchv1.JobComplete, Status: corev1.ConditionTrue},
+				},
+			},
+			wantOK: true,
+		},
+		{
+			name:     "failed counter wins over succeeded counter",
+			status:   batchv1.JobStatus{Succeeded: 1, Failed: 1},
+			wantFail: true,
+		},
+		{
+			name: "failed condition wins over succeeded counter",
+			status: batchv1.JobStatus{
+				Succeeded: 1,
+				Conditions: []batchv1.JobCondition{
+					{Type: batchv1.JobFailed, Status: corev1.ConditionTrue},
+				},
+			},
+			wantFail: true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			if got := jobTerminalFailed(tt.status); got != tt.wantFail {
+				t.Fatalf("jobTerminalFailed() = %v, want %v", got, tt.wantFail)
+			}
+			if got := jobTerminalSucceeded(tt.status); got != tt.wantOK {
+				t.Fatalf("jobTerminalSucceeded() = %v, want %v", got, tt.wantOK)
+			}
+		})
+	}
+}
+
 func TestReconcileSetsDegradedConditionWhenJobCreationFails(t *testing.T) {
 	t.Parallel()
 

@@ -157,7 +157,19 @@ var _ = Describe("InstallEpinio Controller", func() {
 
 			job := &batchv1.Job{}
 			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: "epinio-installer-system-test-resource", Namespace: "system"}, job)).To(Succeed())
+			now := metav1.Now()
+			job.Status.Succeeded = 0
 			job.Status.Failed = 1
+			job.Status.Conditions = []batchv1.JobCondition{
+				{
+					Type:               batchv1.JobFailed,
+					Status:             corev1.ConditionTrue,
+					LastProbeTime:      now,
+					LastTransitionTime: now,
+					Reason:             "BackoffLimitExceeded",
+					Message:            "Job has reached the specified backoff limit",
+				},
+			}
 			Expect(k8sClient.Status().Update(ctx, job)).To(Succeed())
 
 			_, err = reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: typeNamespacedName})
