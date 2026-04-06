@@ -409,19 +409,33 @@ func (r *InstallEpinioReconciler) reconcileDelete(ctx context.Context, inst *epi
 		return ctrl.Result{}, err
 	}
 
-	// Delete the operator namespace (epinio-system) to clean up all operator resources.
-	ns := &corev1.Namespace{}
-	ns.Name = ctrlNs
-	if err := r.deleteIfExists(ctx, ns, "Namespace"); err != nil {
+	// Check if this is the last InstallEpinio in the namespace before removing the finalizer.
+	var remaining epiniov1alpha1.InstallEpinioList
+	if err := r.List(ctx, &remaining, client.InNamespace(ctrlNs)); err != nil {
+		log.Error(err, "failed to list remaining InstallEpinio resources")
 		return ctrl.Result{}, err
 	}
-	log.Info("Deleted operator namespace", "namespace", ctrlNs)
+	// The current resource is still present (finalizer not yet removed), so count > 1 means others exist.
+	lastCR := len(remaining.Items) <= 1
 
+	// Remove finalizer first so the CR can be fully deleted even if the
+	// subsequent namespace deletion terminates the operator pod.
 	controllerutil.RemoveFinalizer(inst, installCleanupFinalizer)
 	log.Info("Removing cleanup finalizer")
 	if err := r.Update(ctx, inst); err != nil {
 		log.Error(err, "failed to remove cleanup finalizer")
 		return ctrl.Result{}, err
+	}
+
+	// Delete the operator namespace after the finalizer is gone so that
+	// namespace termination is not blocked by the CR.
+	if lastCR {
+		ns := &corev1.Namespace{}
+		ns.Name = ctrlNs
+		if err := r.deleteIfExists(ctx, ns, "Namespace"); err != nil {
+			return ctrl.Result{}, err
+		}
+		log.Info("Deleted operator namespace", "namespace", ctrlNs)
 	}
 
 	return ctrl.Result{}, nil
