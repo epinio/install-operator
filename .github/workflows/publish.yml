@@ -2,13 +2,21 @@ name: Publish
 
 on:
   push:
-    branches:
-      - main
     tags:
       - 'v*'
 
 jobs:
+  lint:
+    uses: ./.github/workflows/lint.yml
+
+  test:
+    uses: ./.github/workflows/test.yml
+
+  test-e2e:
+    uses: ./.github/workflows/test-e2e.yml
+
   build-push:
+    needs: [lint, test, test-e2e]
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -27,15 +35,6 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Determine image tag
-        id: tag
-        run: |
-          if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
-            echo "tag=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
-          else
-            echo "tag=latest" >> "$GITHUB_OUTPUT"
-          fi
-
       - name: Build and push
         run: |
-          make docker-buildx IMG=ghcr.io/epinio/install-operator:${{ steps.tag.outputs.tag }}
+          make docker-buildx IMG=ghcr.io/epinio/install-operator:${{ github.ref_name }}
