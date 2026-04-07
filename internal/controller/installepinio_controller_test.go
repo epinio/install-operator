@@ -18,7 +18,6 @@ package controller
 
 import (
 	"context"
-	"fmt"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -34,32 +33,28 @@ import (
 	epiniov1alpha1 "github.com/epinio/install-operator/api/v1alpha1"
 )
 
-var testNsCounter int
-
 var _ = Describe("InstallEpinio Controller", func() {
 	Context("When reconciling a resource", func() {
 		const resourceName = "test-resource"
 
 		ctx := context.Background()
 
-		var testNs string
-		var typeNamespacedName types.NamespacedName
+		typeNamespacedName := types.NamespacedName{
+			Name:      resourceName,
+			Namespace: "system",
+		}
 		installepinio := &epiniov1alpha1.InstallEpinio{}
 		var reconciler *InstallEpinioReconciler
 
 		BeforeEach(func() {
-			testNsCounter++
-			testNs = fmt.Sprintf("test-system-%d", testNsCounter)
-			typeNamespacedName = types.NamespacedName{
-				Name:      resourceName,
-				Namespace: testNs,
-			}
-
-			Expect(k8sClient.Create(ctx, &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: testNs}})).To(Succeed())
+			Expect(k8sClient.Create(ctx, &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "system"}})).To(SatisfyAny(
+				Succeed(),
+				WithTransform(errors.IsAlreadyExists, BeTrue()),
+			))
 			reconciler = &InstallEpinioReconciler{
 				Client:                  k8sClient,
 				Scheme:                  k8sClient.Scheme(),
-				ControllerNamespace:     testNs,
+				ControllerNamespace:     "system",
 				InstallerServiceAccount: "installer-sa",
 				InstallerHelmImage:      "example.com/helm:test",
 			}
@@ -70,7 +65,7 @@ var _ = Describe("InstallEpinio Controller", func() {
 				resource := &epiniov1alpha1.InstallEpinio{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      resourceName,
-						Namespace: testNs,
+						Namespace: "system",
 					},
 					Spec: epiniov1alpha1.InstallEpinioSpec{
 						Domain:          "demo.example.test",
@@ -115,7 +110,7 @@ var _ = Describe("InstallEpinio Controller", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			job := &batchv1.Job{}
-			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: fmt.Sprintf("epinio-installer-%s-test-resource", testNs), Namespace: testNs}, job)).To(Succeed())
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: "epinio-installer-system-test-resource", Namespace: "system"}, job)).To(Succeed())
 			Expect(job.Spec.Template.Spec.Containers).To(HaveLen(1))
 			Expect(job.Spec.Template.Spec.Containers[0].Env).To(ContainElement(corev1.EnvVar{Name: "EPINIO_VERSION", Value: "1.0.0"}))
 			Expect(job.Spec.Template.Spec.ServiceAccountName).To(Equal("installer-sa"))
@@ -124,7 +119,7 @@ var _ = Describe("InstallEpinio Controller", func() {
 			Expect(job.OwnerReferences[0].Name).To(Equal(resourceName))
 
 			configMap := &corev1.ConfigMap{}
-			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: fmt.Sprintf("epinio-install-script-%s-test-resource", testNs), Namespace: testNs}, configMap)).To(Succeed())
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: "epinio-install-script-system-test-resource", Namespace: "system"}, configMap)).To(Succeed())
 			Expect(configMap.OwnerReferences).To(HaveLen(1))
 			Expect(configMap.OwnerReferences[0].Name).To(Equal(resourceName))
 
@@ -141,7 +136,7 @@ var _ = Describe("InstallEpinio Controller", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			job := &batchv1.Job{}
-			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: fmt.Sprintf("epinio-installer-%s-test-resource", testNs), Namespace: testNs}, job)).To(Succeed())
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: "epinio-installer-system-test-resource", Namespace: "system"}, job)).To(Succeed())
 			job.Status.Succeeded = 1
 			Expect(k8sClient.Status().Update(ctx, job)).To(Succeed())
 
