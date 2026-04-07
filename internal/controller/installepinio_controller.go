@@ -20,6 +20,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -546,7 +547,7 @@ func installJobName(namespace, name string) string {
 }
 
 // jobFailureMessage inspects the pods belonging to a failed Job and extracts
-// a human-readable error from the container termination message or exit code.
+// a human-readable error from init or main container termination details.
 func (r *InstallEpinioReconciler) jobFailureMessage(ctx context.Context, namespace, jobName string) string {
 	fallback := fmt.Sprintf("Install Job %q failed", jobName)
 
@@ -558,9 +559,29 @@ func (r *InstallEpinioReconciler) jobFailureMessage(ctx context.Context, namespa
 		return fallback
 	}
 
-	// Look at the most recent pod's container statuses for a termination message.
-	pod := podList.Items[len(podList.Items)-1]
-	for _, cs := range pod.Status.ContainerStatuses {
+	pods := append([]corev1.Pod(nil), podList.Items...)
+	sort.Slice(pods, func(i, j int) bool {
+		return pods[i].CreationTimestamp.After(pods[j].CreationTimestamp.Time)
+	})
+
+	for i := range pods {
+		if msg := installFailureMessageFromPod(&pods[i]); msg != "" {
+			return msg
+		}
+	}
+
+	return fallback
+}
+
+func installFailureMessageFromPod(pod *corev1.Pod) string {
+	if msg := installFailureMessageFromContainerStatuses(pod.Status.InitContainerStatuses); msg != "" {
+		return msg
+	}
+	return installFailureMessageFromContainerStatuses(pod.Status.ContainerStatuses)
+}
+
+func installFailureMessageFromContainerStatuses(statuses []corev1.ContainerStatus) string {
+	for _, cs := range statuses {
 		if cs.State.Terminated == nil {
 			continue
 		}
@@ -575,8 +596,7 @@ func (r *InstallEpinioReconciler) jobFailureMessage(ctx context.Context, namespa
 			return fmt.Sprintf("Install failed with exit code %d", term.ExitCode)
 		}
 	}
-
-	return fallback
+	return ""
 }
 
 func jobTerminalFailed(status batchv1.JobStatus) bool {
