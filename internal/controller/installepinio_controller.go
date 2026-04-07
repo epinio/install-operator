@@ -20,6 +20,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -262,10 +263,7 @@ func (r *InstallEpinioReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	if jobTerminalFailed(job.Status) {
 		failed := job.Status.Failed
 		log.Info("Install Job reported failure", "job", jobName, "namespace", ctrlNs, "failed", failed)
-		failMsg := fmt.Sprintf("Install Job failed (%d failed)", failed)
-		if failed == 0 {
-			failMsg = "Install Job failed"
-		}
+		failMsg := r.jobFailureMessage(ctx, ctrlNs, jobName)
 		setCondition(&inst, metav1.Condition{
 			Type:    conditionDegraded,
 			Status:  metav1.ConditionTrue,
@@ -412,11 +410,33 @@ func (r *InstallEpinioReconciler) reconcileDelete(ctx context.Context, inst *epi
 		return ctrl.Result{}, err
 	}
 
+	// Check if this is the last InstallEpinio in the namespace before removing the finalizer.
+	var remaining epiniov1alpha1.InstallEpinioList
+	if err := r.List(ctx, &remaining, client.InNamespace(ctrlNs)); err != nil {
+		log.Error(err, "failed to list remaining InstallEpinio resources")
+		return ctrl.Result{}, err
+	}
+	// The current resource is still present (finalizer not yet removed), so count > 1 means others exist.
+	lastCR := len(remaining.Items) <= 1
+
+	// Remove finalizer first so the CR can be fully deleted even if the
+	// subsequent namespace deletion terminates the operator pod.
 	controllerutil.RemoveFinalizer(inst, installCleanupFinalizer)
 	log.Info("Removing cleanup finalizer")
 	if err := r.Update(ctx, inst); err != nil {
 		log.Error(err, "failed to remove cleanup finalizer")
 		return ctrl.Result{}, err
+	}
+
+	// Delete the operator namespace after the finalizer is gone so that
+	// namespace termination is not blocked by the CR.
+	if lastCR {
+		ns := &corev1.Namespace{}
+		ns.Name = ctrlNs
+		if err := r.deleteIfExists(ctx, ns, "Namespace"); err != nil {
+			return ctrl.Result{}, err
+		}
+		log.Info("Deleted operator namespace", "namespace", ctrlNs)
 	}
 
 	return ctrl.Result{}, nil
@@ -524,6 +544,59 @@ func configMapName(namespace, name string) string {
 
 func installJobName(namespace, name string) string {
 	return jobNamePrefix + namespace + "-" + name
+}
+
+// jobFailureMessage inspects the pods belonging to a failed Job and extracts
+// a human-readable error from init or main container termination details.
+func (r *InstallEpinioReconciler) jobFailureMessage(ctx context.Context, namespace, jobName string) string {
+	fallback := fmt.Sprintf("Install Job %q failed", jobName)
+
+	var podList corev1.PodList
+	if err := r.List(ctx, &podList,
+		client.InNamespace(namespace),
+		client.MatchingLabels{"job-name": jobName},
+	); err != nil || len(podList.Items) == 0 {
+		return fallback
+	}
+
+	pods := append([]corev1.Pod(nil), podList.Items...)
+	sort.Slice(pods, func(i, j int) bool {
+		return pods[i].CreationTimestamp.After(pods[j].CreationTimestamp.Time)
+	})
+
+	for i := range pods {
+		if msg := installFailureMessageFromPod(&pods[i]); msg != "" {
+			return msg
+		}
+	}
+
+	return fallback
+}
+
+func installFailureMessageFromPod(pod *corev1.Pod) string {
+	if msg := installFailureMessageFromContainerStatuses(pod.Status.InitContainerStatuses); msg != "" {
+		return msg
+	}
+	return installFailureMessageFromContainerStatuses(pod.Status.ContainerStatuses)
+}
+
+func installFailureMessageFromContainerStatuses(statuses []corev1.ContainerStatus) string {
+	for _, cs := range statuses {
+		if cs.State.Terminated == nil {
+			continue
+		}
+		term := cs.State.Terminated
+		if term.Message != "" {
+			return fmt.Sprintf("Install failed: %s", term.Message)
+		}
+		if term.Reason != "" {
+			return fmt.Sprintf("Install failed: %s (exit code %d)", term.Reason, term.ExitCode)
+		}
+		if term.ExitCode != 0 {
+			return fmt.Sprintf("Install failed with exit code %d", term.ExitCode)
+		}
+	}
+	return ""
 }
 
 func jobTerminalFailed(status batchv1.JobStatus) bool {
